@@ -1,0 +1,66 @@
+# -----------------------------
+# openenv.yaml
+# -----------------------------
+
+name: customer-support-rl
+version: 1.0.0
+description: >
+  A reinforcement learning-style customer support ticket environment
+  with FastAPI API for demo and evaluation.
+
+framework: python
+entry_point: api.py
+python_version: ">=3.12"
+
+# -----------------------------
+# Environment Specification
+# -----------------------------
+environment:
+  type: openenv-style
+  class: CustomerSupportEnv
+  file: env.py
+  observation: EnvObservation
+  action: EnvAction
+  reward: EnvReward
+  max_steps: 20
+
+# -----------------------------
+# Tasks & Evaluation
+# -----------------------------
+tasks:
+  easy:
+    description: Resolve at least 2 tickets
+    reward_threshold: 1.0
+  medium:
+    description: Resolve all medium-priority tickets
+    reward_threshold: 1.0
+  hard:
+    description: Resolve all tickets while minimizing SLA violations
+    reward_threshold: 1.0
+
+# -----------------------------
+# Demo & API
+# -----------------------------
+api:
+  type: fastapi
+  file: api.py
+  routes:
+    - "/reset"
+    - "/state"
+    - "/step"
+    - "/auto-run"
+
+# -----------------------------
+# Dependencies
+# -----------------------------
+requirements:
+  - pydantic==2.6.0
+  - dataclasses-json==0.5.15
+  - typing-extensions==4.8.0
+  - numpy==1.26.0
+
+# -----------------------------
+# Metadata
+# -----------------------------
+author: "Angel Singh"
+contact: "angel.25bcs10712@sst.scaler.com"

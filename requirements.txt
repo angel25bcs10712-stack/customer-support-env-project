@@ -1,0 +1,6 @@
+pydantic==2.6.0
+numpy==1.26.0
+fastapi==0.110.0
+uvicorn==0.29.0
+requests==2.33.1
+gradio==6.11.0
