@@ -1,178 +1,121 @@
-# 🚀 Customer Support RL Environment
+# Customer Support OpenEnv Environment
 
-## 📌 Overview
+## Overview
 
-This project simulates a **Customer Support Reinforcement Learning Environment** where an agent prioritizes and resolves support tickets based on urgency, SLA deadlines, and priority levels.
+This repository implements an **OpenEnv-compatible AI customer support environment**.
+The environment simulates ticket triage, issue categorization, and customer-facing resolution messaging with measurable rewards.
+It is designed for real-world agent evaluation and includes an API server, baseline inference script, Docker container, and OpenEnv metadata.
 
-The system is built using:
+## Environment Description
 
-* **FastAPI** for backend API
-* **Custom RL Environment**
-* **Greedy Agent Strategy**
-* **Gradio UI** for interaction
+The task is a customer support workflow where an AI agent:
+1. Classifies the ticket category.
+2. Writes a customer-facing resolution message.
 
----
+The environment delivers partial feedback after each step and returns a final score from `0.0` to `1.0`.
 
-## ⚙️ Features
+## Observation Space
 
-* 📡 API-based environment (`/reset`, `/step`)
-* 🤖 Intelligent agent for ticket prioritization
-* 📊 Evaluation metrics (Easy, Medium, Hard tasks)
-* 🖥️ Interactive UI using Gradio
-* 🔁 Automated episode execution
+Each observation includes:
 
----
+* `ticket`: the customer's message
+* `priority`: support urgency (`low`, `medium`, `high`)
+* `sentiment`: customer emotional tone
+* `sla_hours`: remaining SLA window in hours
+* `step`: current action step number
+* `instructions`: guidance for the current phase
 
-## 🗂️ Project Structure
+## Action Space
 
-```
-openenv-project/
-│
-├── api.py
-├── env.py
-├── models.py
-├── inference.py
-├── auto_run.py
-├── tasks.py
-├── gradio_app.py
-│
-├── requirements.txt
-├── README.md
-```
+* `response`: a single support agent response string
 
----
+The agent uses the same action type for both classification and resolution steps.
 
-## 🔧 Setup Instructions
+## Tasks and Difficulty Progression
 
-### 1️⃣ Create Virtual Environment
+The environment includes three deterministic tasks:
+
+* `easy`: delivery update with clear tracking language
+* `medium`: damaged product refund and return assistance
+* `hard`: duplicate billing, locked account, and urgent access restoration
+
+Each task is scored by a grader that rewards correct category choice, supportive tone, and a relevant resolution plan.
+
+## OpenEnv Metadata
+
+* `openenv.yaml` defines the entrypoint, task list, observations, actions, and reward type.
+* `env.environment:CustomerSupportEnv` is the OpenEnv entrypoint.
+
+## Setup
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate   # Windows
-```
-
-### 2️⃣ Install Dependencies
-
-```bash
+.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
----
-
-## ▶️ Run the Project
-
-### 🔹 Start API Server
+## Run the API Server
 
 ```bash
 uvicorn api:app --reload
 ```
 
----
+Then call:
 
-### 🔹 Run Auto Evaluation
+* `POST /reset`
+* `POST /step` with `{ "response": "..." }`
 
-```bash
-python auto_run.py
-```
+## Baseline Inference
 
-### ✅ Expected Output Format
-
-```
-START
-STEP 0 | Action: X | Reward: Y
-STEP 1 | Action: X | Reward: Y
-...
-END
-```
-
----
-
-### 🔹 Run Gradio UI
+Set environment variables first:
 
 ```bash
-python gradio_app.py
+set OPENAI_API_KEY=your_api_key
+set API_BASE_URL=https://api.openai.com/v1
+set MODEL_NAME=gpt-4o-mini
 ```
 
----
+Run:
 
-## 🔌 API Endpoints
-
-### 🔹 Reset Environment
-
-```
-POST /reset
+```bash
+python inference.py
 ```
 
-### 🔹 Take Step
+The script emits structured logs in the required format:
 
-```
-POST /step
-Body:
-{
-  "ticket_id": int
-}
-```
+* `[START] task=... env=... model=...`
+* `[STEP] step=... action=... reward=... done=... error=...`
+* `[END] success=... steps=... score=... rewards=...`
 
----
+## Docker
 
-## 🤖 Agent Logic
+Build and run the container:
 
-The agent selects actions using a **priority-based heuristic**:
-
-* High priority > Medium > Low
-* Considers SLA urgency:
-
-  ```
-  urgency = sla_deadline - waiting_time
-  ```
-* Picks the most critical unresolved ticket
-
----
-
-## 📊 Evaluation Metrics
-
-### ✅ Easy
-
-* Resolve at least 2 tickets
-
-### ✅ Medium
-
-* Resolve all medium-priority tickets
-
-### ✅ Hard
-
-* Maximize:
-
-  * Total resolved tickets
-  * Minimize SLA violations
-
----
-
-## 🌍 Environment Variables
-
-```python
-API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
-MODEL_NAME = os.getenv("MODEL_NAME", "customer-support-agent")
-HF_TOKEN = os.getenv("HF_TOKEN")
+```bash
+docker build -t customer-support-openenv .
+docker run --rm -p 7860:7860 -e OPENAI_API_KEY="$OPENAI_API_KEY" customer-support-openenv
 ```
 
----
+## Project Structure
 
-## 🚀 Submission Notes
+```
+openenv-project/
++-- api.py
++-- Dockerfile
++-- README.md
++-- inference.py
++-- openenv.yaml
++-- requirements.txt
++-- env/
+�   +-- __init__.py
+�   +-- environment.py
+�   +-- grader.py
+�   +-- models.py
+�   +-- tasks.py
+```
 
-* Uses **API-based architecture** (as required)
-* Follows **structured logging format**
-* No direct environment calls in agent
-* Fully compatible with Hugging Face deployment
+## Notes
 
----
-
-## 🎉 Final Status
-
-✅ API Working
-✅ Agent Working
-✅ Evaluation Working
-✅ UI Working
-✅ Ready for Submission
-
----
+* The environment supports multi-step evaluation with partial reward shaping.
+* The grader is deterministic and returns values in the `0.0`�`1.0` range.
+* The API server is ready for containerized Hugging Face deployment.

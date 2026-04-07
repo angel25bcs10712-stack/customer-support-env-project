@@ -1,45 +1,49 @@
-# api.py
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
-from fastapi import FastAPI
-from env import CustomerSupportEnv
-from models import Action
+from env.environment import CustomerSupportEnv
+from env.models import Action
 
-app = FastAPI(title="Customer Support API")
+app = FastAPI(
+    title="Customer Support OpenEnv",
+    description="A customer support ticket triage and response environment for agent evaluation.",
+)
 
-# Initialize environment
 env = CustomerSupportEnv()
+current_result = None
 
 
-# -----------------------------
-# HOME
-# -----------------------------
-@app.get("/")
-def home():
-    return {"message": "Customer Support API is running"}
+class StepRequest(BaseModel):
+    response: str
 
 
-# -----------------------------
-# RESET
-# -----------------------------
+def result_to_dict(result):
+    return {
+        "observation": result.observation.dict(),
+        "reward": result.reward,
+        "done": result.done,
+        "info": result.info,
+    }
+
+
 @app.post("/reset")
 def reset():
-    state = env.reset()
-    return {
-        "state": state.dict(),
-        "message": "Environment reset"
-    }
+    global current_result
+    current_result = env.reset()
+    return result_to_dict(current_result)
 
 
-# -----------------------------
-# STEP
-# -----------------------------
 @app.post("/step")
-def step(action: Action):
-    state, reward, done, info = env.step(action)
+def step(request: StepRequest):
+    global current_result
+    if current_result is None:
+        raise HTTPException(status_code=400, detail="Call /reset before calling /step.")
+    action = Action(response=request.response)
+    current_result = env.step(action)
+    return result_to_dict(current_result)
 
-    return {
-        "state": state.dict(),
-        "reward": reward,
-        "done": done,
-        "info": info
-    }
+
+@app.get("/state")
+def state():
+    return {"state": env.state()}
+ 

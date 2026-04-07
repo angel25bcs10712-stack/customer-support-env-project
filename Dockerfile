@@ -1,24 +1,11 @@
-# -----------------------------
-# Dockerfile for Customer Support RL Environment
-# -----------------------------
-
-# Use official Python image
 FROM python:3.12-slim
 
-# Set working directory inside container
-WORKDIR /app
-
-# Copy project files
-COPY . /app
-
-# Upgrade pip
-RUN pip install --upgrade pip
-
-# Install dependencies
-RUN pip install -r requirements.txt
-
-# Set environment variable to prevent Python from buffering stdout
 ENV PYTHONUNBUFFERED=1
+WORKDIR /workspace
 
-# Default command to run the inference script
-CMD ["python", "inference.py"]
+COPY requirements.txt .
+RUN python -m pip install --upgrade pip && python -m pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+EXPOSE 7860
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "7860"]
