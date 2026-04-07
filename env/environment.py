@@ -32,14 +32,17 @@ class CustomerSupportEnv:
     def step(self, action: Action) -> StepResult:
         if self.current_task is None:
             raise ValueError("Environment must be reset before calling step().")
-        if self.step_number > self.MAX_STEPS:
-            raise ValueError("Episode already finished. Call reset() to start a new task.")
-
+        
+        # Store the current step for the grader
         current_step = self.step_number
         reward = grade(action.response, self.current_task, current_step)
-        done = current_step == self.MAX_STEPS
-        self.step_number = min(self.step_number + 1, self.MAX_STEPS)
-        self.step_number = 2 if not done else self.step_number
+        
+        # Check if we have reached the end (Step 2)
+        done = (current_step == self.MAX_STEPS)
+        
+        # Prepare for the next step if not finished
+        if not done:
+            self.step_number += 1
 
         return StepResult(
             observation=self._build_observation(),
@@ -48,9 +51,12 @@ class CustomerSupportEnv:
             info={
                 "task": self.current_task["name"],
                 "difficulty": self.current_task["difficulty"],
-                "phase": "resolution" if current_step >= 1 else "classification",
+                "phase": "resolution" if done else "classification",
             },
         )
+
+    
+   
 
     def state(self) -> Dict[str, str]:
         return {
