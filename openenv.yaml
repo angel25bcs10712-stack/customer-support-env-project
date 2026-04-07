@@ -1,13 +1,27 @@
 name: customer-support
 description: AI customer support ticket triage and resolution environment
 version: 1.0
-
 entrypoint: env.environment:CustomerSupportEnv
 
 tasks:
-  - easy
-  - medium
-  - hard
+  easy:
+    ticket: "Hi, I ordered a laptop two weeks ago, and the tracking page still says it is in transit. When will it arrive?"
+    priority: "low"
+    sentiment: "neutral"
+    sla_hours: 48
+    instructions: "First identify the issue category, then provide a polite delivery update and explain the next step."
+  medium:
+    ticket: "My replacement headphones arrived damaged and I want a refund. I also need help with returning the broken item."
+    priority: "medium"
+    sentiment: "frustrated"
+    sla_hours: 24
+    instructions: "First classify the issue, then write a supportive resolution that offers the correct refund or return process."
+  hard:
+    ticket: "I was charged twice for my subscription renewal and then locked out of my account. I cannot access premium features and need urgent help."
+    priority: "high"
+    sentiment: "angry"
+    sla_hours: 6
+    instructions: "First choose the correct category, then craft an urgent response that apologizes, explains the recovery steps, and escalates or resolves the account issue."
 
 observation:
   ticket: string
