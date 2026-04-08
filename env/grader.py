@@ -1,6 +1,5 @@
 import re
-from typing import Dict, List
-
+from typing import Dict, Any, List
 # --- 1. CONFIGURATION ---
 # We use fixed scores to ensure we never touch the 0.0 or 1.0 boundaries.
 SCORE_MAP = {
