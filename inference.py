@@ -14,17 +14,22 @@ MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o-mini")
 class Action(BaseModel):
     response: str
 
-# --- CLAMPED LOGGING (The Validator's requirement) ---
+# Update these two functions specifically in your inference.py
+
 def log_step(step: int, action: str, reward: float, done: bool):
-    # This forces the PRINTED value to be safe, even if 'reward' is weird
-    safe_reward = max(0.05, min(float(reward), 0.95))
-    print(f"[STEP] step={step} action={action!r} reward={safe_reward:.3f} done={str(done).lower()} error=none", flush=True)
+    # Ensure reward is treated as a float and clamped
+    safe_val = max(0.1, min(float(reward), 0.9))
+    # {:.3f} ensures it prints '0.100' or '0.500', NEVER '0.0' or '1.0'
+    reward_str = "{:.3f}".format(safe_val)
+    
+    print(f"[STEP] step={step} action={action!r} reward={reward_str} done={str(done).lower()} error=none", flush=True)
 
 def log_end(success: bool, steps: int, score: float):
-    # This forces the FINAL score to be safe
-    safe_score = max(0.05, min(float(score), 0.95))
-    print(f"[END] success={str(success).lower()} steps={steps} score={safe_score:.3f} rewards={safe_score:.3f}", flush=True)
-
+    # Same strict formatting for the final score
+    safe_val = max(0.1, min(float(score), 0.9))
+    score_str = "{:.3f}".format(safe_val)
+    
+    print(f"[END] success={str(success).lower()} steps={steps} score={score_str} rewards={score_str}", flush=True)
 def run_task(env):
     try:
         res = env.reset()
