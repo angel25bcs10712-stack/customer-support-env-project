@@ -5,15 +5,28 @@ build-backend = "setuptools.build-meta"
 [project]
 name = "customer-support-env"
 version = "0.1.0"
+description = "AI customer support ticket triage and resolution environment"
+readme = "README.md"
+requires-python = ">=3.10"
+# These are the dependencies the validator will check for
 dependencies = [
-    "fastapi",
-    "uvicorn",
-    "openai",
+    "fastapi>=0.104.0",
+    "pydantic>=2.0.0",
+    "uvicorn>=0.24.0",
+    "openai>=1.0.0",
+    "openenv>=0.2.0",
     "python-dotenv",
-    "pyyaml",
-    "pydantic"
+    "pyyaml"
 ]
 
+# This tells the validator how to start your server
+[project.scripts]
+server = "server.app:main"
+
+# This ensures all your code folders are included in the build
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["env*"]
+include = ["env*", "server*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.json"]
