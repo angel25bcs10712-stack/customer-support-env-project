@@ -1,94 +1,52 @@
 import re
-from typing import Dict
+from typing import Dict, List
 
-# --- 1. CONFIGURATION DATA ---
-CATEGORY_SYNONYMS = {
-    "delivery": ["delivery", "shipping", "shipment", "track", "tracked", "arrive"],
-    "refund": ["refund", "return", "reimburse", "money back", "exchange"],
-    "account": ["account", "login", "access", "locked", "sign in", "billing", "subscription"],
+# --- 1. CONFIGURATION ---
+# We use fixed scores to ensure we never touch the 0.0 or 1.0 boundaries.
+SCORE_MAP = {
+    "MATCH_HIGH": 0.850,
+    "MATCH_LOW": 0.450,
+    "MISS": 0.150
 }
 
-EMPATHY_PHRASES = ["sorry", "apologize", "understand", "thank you", "happy to help", "please"]
-NEGATIVE_PHRASES = ["can't", "cannot", "won't", "not possible", "no", "unable"]
-URGENT_PHRASES = ["urgent", "as soon as possible", "right away", "immediately", "priority"]
+CATEGORY_KEYWORDS = {
+    "delivery": ["delivery", "shipping", "track", "arrive", "package"],
+    "refund": ["refund", "return", "money", "reimburse"],
+    "account": ["login", "password", "account", "access", "billing"]
+}
 
-# --- 2. UTILITY FUNCTIONS ---
-def normalize_text(text: str) -> str:
+# --- 2. UTILITY ---
+def clean_text(text: str) -> str:
+    """Standardizes text to ensure robust keyword matching."""
+    if not text:
+        return ""
     return re.sub(r"[^a-z0-9 ]+", " ", text.lower())
 
-def contains_any(text: str, keywords) -> bool:
-    return any(keyword in text for keyword in keywords)
-
-# --- 3. SCORING MODULES ---
-def best_category_match(response: str, expected: str) -> float:
-    normalized = normalize_text(response)
-    if contains_any(normalized, CATEGORY_SYNONYMS[expected]):
-        return 1.0
-    
-    other_categories = [k for k in CATEGORY_SYNONYMS if k != expected]
-    if any(contains_any(normalized, CATEGORY_SYNONYMS[c]) for c in other_categories):
-        return 0.2
-    return 0.0
-
-def empathy_score(response: str, sentiment: str) -> float:
-    normalized = normalize_text(response)
-    score = 0.0
-    if contains_any(normalized, EMPATHY_PHRASES):
-        score += 0.15
-    if sentiment == "angry" and contains_any(normalized, URGENT_PHRASES):
-        score += 0.05
-    return min(score, 0.2)
-
-def resolution_score(response: str, task: Dict[str, str]) -> float:
-    normalized = normalize_text(response)
-    keywords = task.get("resolution_keywords", [])
-    
-    keyword_matches = [kw for kw in keywords if kw in normalized]
-    coverage = len(keyword_matches) / max(len(keywords), 1)
-    
-    score = 0.2 + (coverage * 0.4)
-    
-    cat = task.get("expected_category")
-    if cat == "account" and contains_any(normalized, ["unlock", "access", "billing", "escalate"]):
-        score += 0.05
-    if cat == "refund" and contains_any(normalized, ["refund", "return", "reimburse"]):
-        score += 0.05
-    if cat == "delivery" and contains_any(normalized, ["tracking", "shipment", "shipping"]):
-        score += 0.05
-        
-    if contains_any(normalized, NEGATIVE_PHRASES):
-        score -= 0.1
-        
-    return max(min(score, 0.7), 0.0)
-
-# --- 4. MAIN GRADING INTERFACE ---
-def grade_classification(response: str, task: Dict[str, str]) -> float:
-    category_match = best_category_match(response, task["expected_category"])
-    return round(category_match * 0.3, 3)
-
-def grade_resolution(response: str, task: Dict[str, str]) -> float:
-    raw_res = resolution_score(response, task)
-    raw_emp = empathy_score(response, task.get("sentiment", "neutral"))
-    return round(raw_res + raw_emp, 3)
-    
-def grade(self, response: str, task: dict, step: int) -> float:
+# --- 3. MAIN GRADER ---
+def grade(response: str, task: Dict[str, Any], step: int) -> float:
     """
-    STRICT SAFETY GRADER:
-    Ensures every return is within [0.1, 0.9].
+    Final Safety Grader.
+    GUARANTEES a return value strictly inside the (0, 1) open interval.
     """
-    res = response.lower()
+    normalized = clean_text(response)
+    expected_cat = task.get("expected_category", "account")
     
-    # 1. Simple Scoring
+    # 1. Logic Selection
     if step == 1:
-        # Give 0.5 for a match, 0.1 for a miss. NEVER 0.0.
-        keywords = ["delivery", "refund", "account", "order", "shipping"]
-        score = 0.5 if any(k in res for k in keywords) else 0.1
+        # Check for Category match
+        keywords = CATEGORY_KEYWORDS.get(expected_cat, ["help"])
+        is_match = any(word in normalized for word in keywords)
+        raw_score = SCORE_MAP["MATCH_LOW"] if is_match else SCORE_MAP["MISS"]
     else:
-        # Give 0.8 for a match, 0.2 for a miss. NEVER 1.0.
+        # Check for Resolution keywords
         res_keywords = task.get("resolution_keywords", [])
-        score = 0.8 if any(k in res for k in res_keywords) else 0.2
+        is_match = any(word in normalized for word in res_keywords) if res_keywords else False
+        raw_score = SCORE_MAP["MATCH_HIGH"] if is_match else SCORE_MAP["MISS"]
 
-    # 2. THE FINAL LOCK
-    # If any math went wrong, this forces the float into the safe zone.
-    return float(max(0.1, min(score, 0.9)))
-
+    # 2. THE FINAL HARD LOCK
+    # This is the 'Shield'. Even if logic above is modified, 
+    # this code prevents a 0.0 or 1.0 from ever escaping.
+    safe_score = max(0.100, min(float(raw_score), 0.900))
+    
+    # Returning a float rounded to 3 decimal places
+    return float(round(safe_score, 3))
