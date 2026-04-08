@@ -16,7 +16,7 @@ class CustomerSupportEnv:
     def __init__(self):
         self.index = 0
         self.current_task = None
-        self.step_number = 0
+        self.step_number = 1
         self.total_reward = 0.0
         self.done = False
 
@@ -37,18 +37,19 @@ class CustomerSupportEnv:
             "difficulty": self.current_task.get("difficulty", "medium"),
             "phase": "classification",
         }
-        # Returning as dicts is the most compatible format for the FastAPI layer
         return obs.dict(), info
 
     def step(self, action_input: Any) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
         """
         Processes an agent action and returns (observation, reward, done, info).
-        Handles both raw strings and Action objects for maximum compatibility.
         """
         if self.current_task is None:
             raise ValueError("Environment must be reset before calling step().")
         
-        # Extract the response string regardless of how the API sent it
+        if self.done:
+            return self._build_observation().dict(), 0.0, True, {"error": "Environment already done"}
+
+        # Extract the response string
         if hasattr(action_input, 'response'):
             response_text = action_input.response
         elif isinstance(action_input, dict):
@@ -56,17 +57,16 @@ class CustomerSupportEnv:
         else:
             response_text = str(action_input)
 
-        current_step = self.step_number
-        
-        # Calculate reward using your custom grader
-        reward = grade(response_text, self.current_task, current_step)
+        # 1. Grade the response for the CURRENT step
+        reward = grade(response_text, self.current_task, self.step_number)
         self.total_reward += reward
         
-        # Determine if the session is finished
-        self.done = (current_step >= self.MAX_STEPS)
-        
-        if not self.done:
+        # 2. Update the state: If we just finished Step 2, we are DONE.
+        if self.step_number >= self.MAX_STEPS:
+            self.done = True
+        else:
             self.step_number += 1
+            self.done = False
 
         obs = self._build_observation()
         info = {
@@ -82,12 +82,11 @@ class CustomerSupportEnv:
         return {
             "task": self.current_task["name"] if self.current_task else None,
             "step": self.step_number,
-            "total_reward": self.total_reward,
+            "total_reward": round(self.total_reward, 3),
             "is_done": self.done
         }
 
     def close(self) -> None:
-        """Cleanup logic if necessary."""
         pass
 
     def _build_observation(self) -> Observation:
@@ -96,7 +95,7 @@ class CustomerSupportEnv:
             ticket=self.current_task["ticket"],
             priority=self.current_task["priority"],
             sentiment=self.current_task["sentiment"],
-            sla_hours=self.current_task["sla_hours"],
+            sla_hours=float(self.current_task["sla_hours"]),
             step=self.step_number,
             instructions=self.current_task["instructions"],
         )
