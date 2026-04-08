@@ -48,7 +48,6 @@ def resolution_score(response: str, task: Dict[str, str]) -> float:
     
     score = 0.2 + (coverage * 0.4)
     
-    # Category-specific bonus logic
     cat = task.get("expected_category")
     if cat == "account" and contains_any(normalized, ["unlock", "access", "billing", "escalate"]):
         score += 0.05
@@ -68,7 +67,6 @@ def grade_classification(response: str, task: Dict[str, str]) -> float:
     return round(category_match * 0.3, 3)
 
 def grade_resolution(response: str, task: Dict[str, str]) -> float:
-    # Combines resolution quality with the empathy bonus
     raw_res = resolution_score(response, task)
     raw_emp = empathy_score(response, task.get("sentiment", "neutral"))
     return round(raw_res + raw_emp, 3)
@@ -76,6 +74,7 @@ def grade_resolution(response: str, task: Dict[str, str]) -> float:
 def grade(response: str, task: Dict[str, str], step: int) -> float:
     """
     Main entry point for the environment grader.
+    Applies a strict clamping to keep scores within (0, 1).
     """
     if step == 1:
         raw_score = grade_classification(response, task)
@@ -83,8 +82,7 @@ def grade(response: str, task: Dict[str, str], step: int) -> float:
         raw_score = grade_resolution(response, task)
     
     # --- CRITICAL VALIDATOR FIX ---
-    # The validator fails if the score is exactly 0.0 or 1.0.
-    # This 'clamps' the score strictly between (0, 1).
+    # Clamping prevents exactly 0.0 and exactly 1.0
     safe_score = max(0.001, min(raw_score, 0.999))
     
     return float(round(safe_score, 3))
