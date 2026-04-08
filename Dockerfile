@@ -20,12 +20,6 @@ ENV HOME=/home/user \
 # Standard Hugging Face port
 EXPOSE 7860
 
-# Run the API
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "7860"]
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
  
  
- 
- 
- 
- 
-
