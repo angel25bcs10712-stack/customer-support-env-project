@@ -1,9 +1,14 @@
-from typing import Dict
+import yaml
+from typing import Dict, Any, Tuple
+# Import the central models from the server package
+from server.models import Observation, StepResponse, Action
 
-from .models import Observation, Action, StepResult
+# Alias StepResponse to StepResult so the existing method signatures work
+StepResult = StepResponse
+
+# Import logic from sibling files in the same folder
 from .tasks import TASKS
 from .grader import grade
-
 
 class CustomerSupportEnv:
     MAX_STEPS = 2
@@ -12,63 +17,81 @@ class CustomerSupportEnv:
         self.index = 0
         self.current_task = None
         self.step_number = 0
+        self.total_reward = 0.0
+        self.done = False
 
-    def reset(self) -> StepResult:
+    def reset(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Resets the environment for a new task.
+        Standard OpenEnv reset returns (observation_dict, info_dict).
+        """
         self.current_task = TASKS[self.index % len(TASKS)]
         self.index += 1
         self.step_number = 1
+        self.total_reward = 0.0
+        self.done = False
 
-        return StepResult(
-            observation=self._build_observation(),
-            reward=0.0,
-            done=False,
-            info={
-                "task": self.current_task["name"],
-                "difficulty": self.current_task["difficulty"],
-                "phase": "classification",
-            },
-        )
+        obs = self._build_observation()
+        info = {
+            "task": self.current_task.get("name", "Support Task"),
+            "difficulty": self.current_task.get("difficulty", "medium"),
+            "phase": "classification",
+        }
+        # Returning as dicts is the most compatible format for the FastAPI layer
+        return obs.dict(), info
 
-    def step(self, action: Action) -> StepResult:
+    def step(self, action_input: Any) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
+        """
+        Processes an agent action and returns (observation, reward, done, info).
+        Handles both raw strings and Action objects for maximum compatibility.
+        """
         if self.current_task is None:
             raise ValueError("Environment must be reset before calling step().")
         
-        # Store the current step for the grader
+        # Extract the response string regardless of how the API sent it
+        if hasattr(action_input, 'response'):
+            response_text = action_input.response
+        elif isinstance(action_input, dict):
+            response_text = action_input.get("response", "")
+        else:
+            response_text = str(action_input)
+
         current_step = self.step_number
-        reward = grade(action.response, self.current_task, current_step)
         
-        # Check if we have reached the end (Step 2)
-        done = (current_step == self.MAX_STEPS)
+        # Calculate reward using your custom grader
+        reward = grade(response_text, self.current_task, current_step)
+        self.total_reward += reward
         
-        # Prepare for the next step if not finished
-        if not done:
+        # Determine if the session is finished
+        self.done = (current_step >= self.MAX_STEPS)
+        
+        if not self.done:
             self.step_number += 1
 
-        return StepResult(
-            observation=self._build_observation(),
-            reward=reward,
-            done=done,
-            info={
-                "task": self.current_task["name"],
-                "difficulty": self.current_task["difficulty"],
-                "phase": "resolution" if done else "classification",
-            },
-        )
+        obs = self._build_observation()
+        info = {
+            "task": self.current_task.get("name", "Support Task"),
+            "difficulty": self.current_task.get("difficulty", "medium"),
+            "phase": "resolution" if self.done else "classification",
+        }
 
-    
-   
+        return obs.dict(), reward, self.done, info
 
-    def state(self) -> Dict[str, str]:
+    def state(self) -> Dict[str, Any]:
+        """Returns current environment metadata."""
         return {
             "task": self.current_task["name"] if self.current_task else None,
             "step": self.step_number,
-            "difficulty": self.current_task["difficulty"] if self.current_task else None,
+            "total_reward": self.total_reward,
+            "is_done": self.done
         }
 
     def close(self) -> None:
+        """Cleanup logic if necessary."""
         pass
 
     def _build_observation(self) -> Observation:
+        """Helper to construct the Observation Pydantic model."""
         return Observation(
             ticket=self.current_task["ticket"],
             priority=self.current_task["priority"],
