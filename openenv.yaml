@@ -1,28 +1,33 @@
-name: customer-support
-description: AI customer support ticket triage and resolution environment
-version: 1.0
+name: customer-support-pro
+description: "AI-driven customer support environment for ticket triage and resolution."
+version: "1.0.0"
+# This tells the validator where your CustomerSupportEnv class lives
 entrypoint: env.environment:CustomerSupportEnv
 
+# Every task must have these fields for the agent to read
 tasks:
   easy:
-    ticket: "Hi, I ordered a laptop two weeks ago, and the tracking page still says it is in transit. When will it arrive?"
-    priority: "low"
-    sentiment: "neutral"
-    sla_hours: 48
-    instructions: "First identify the issue category, then provide a polite delivery update and explain the next step."
-  medium:
-    ticket: "My replacement headphones arrived damaged and I want a refund. I also need help with returning the broken item."
+    ticket: "I can't log in to my account. I've tried resetting my password but no email arrived."
     priority: "medium"
     sentiment: "frustrated"
     sla_hours: 24
-    instructions: "First classify the issue, then write a supportive resolution that offers the correct refund or return process."
-  hard:
-    ticket: "I was charged twice for my subscription renewal and then locked out of my account. I cannot access premium features and need urgent help."
+    instructions: "Verify the user's email status and provide a clear step-by-step for manual recovery."
+  
+  medium:
+    ticket: "My order #12345 arrived but the screen is cracked. I need a replacement or a full refund immediately."
     priority: "high"
     sentiment: "angry"
-    sla_hours: 6
-    instructions: "First choose the correct category, then craft an urgent response that apologizes, explains the recovery steps, and escalates or resolves the account issue."
+    sla_hours: 12
+    instructions: "Acknowledge the damage, apologize, and offer a specific resolution (refund/replacement) based on company policy."
+  
+  hard:
+    ticket: "I was overcharged on my last three monthly statements. If this isn't fixed, I'm taking my business elsewhere and filing a dispute."
+    priority: "critical"
+    sentiment: "angry"
+    sla_hours: 4
+    instructions: "Analyze the billing discrepancy, provide a detailed breakdown of the correction, and offer a retention gesture."
 
+# This schema defines what the AI sees at each step
 observation:
   ticket: string
   priority: string
