@@ -71,18 +71,28 @@ def grade_resolution(response: str, task: Dict[str, str]) -> float:
     raw_emp = empathy_score(response, task.get("sentiment", "neutral"))
     return round(raw_res + raw_emp, 3)
 
+import re
+from typing import Dict
+
+# ... (Keep your CATEGORY_SYNONYMS and helper functions as they are) ...
+
 def grade(response: str, task: Dict[str, str], step: int) -> float:
     """
     Main entry point for the environment grader.
-    Applies a strict clamping to keep scores within (0, 1).
     """
     if step == 1:
-        raw_score = grade_classification(response, task)
+        # grade_classification logic
+        category_match = best_category_match(response, task["expected_category"])
+        raw_score = round(category_match * 0.3, 3)
     else:
-        raw_score = grade_resolution(response, task)
+        # grade_resolution logic
+        raw_res = resolution_score(response, task)
+        raw_emp = empathy_score(response, task.get("sentiment", "neutral"))
+        raw_score = round(raw_res + raw_emp, 3)
     
     # --- CRITICAL VALIDATOR FIX ---
-    # Clamping prevents exactly 0.0 and exactly 1.0
-    safe_score = max(0.001, min(raw_score, 0.999))
+    # The validator requires scores STRICTLY between 0 and 1.
+    # This 'clamps' the score to [0.01, 0.99].
+    safe_score = max(0.01, min(raw_score, 0.99))
     
     return float(round(safe_score, 3))
