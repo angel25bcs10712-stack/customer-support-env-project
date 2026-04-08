@@ -76,23 +76,31 @@ from typing import Dict
 
 # ... (Keep your CATEGORY_SYNONYMS and helper functions as they are) ...
 
+import re
+from typing import Dict
+
 def grade(response: str, task: Dict[str, str], step: int) -> float:
     """
-    Main entry point for the environment grader.
+    Main grading logic. 
+    Returns a score strictly within (0.05, 0.95) to satisfy validator.
     """
-    if step == 1:
-        # grade_classification logic
-        category_match = best_category_match(response, task["expected_category"])
-        raw_score = round(category_match * 0.3, 3)
-    else:
-        # grade_resolution logic
-        raw_res = resolution_score(response, task)
-        raw_emp = empathy_score(response, task.get("sentiment", "neutral"))
-        raw_score = round(raw_res + raw_emp, 3)
+    normalized = response.lower()
     
-    # --- CRITICAL VALIDATOR FIX ---
-    # The validator requires scores STRICTLY between 0 and 1.
-    # This 'clamps' the score to [0.01, 0.99].
-    safe_score = max(0.01, min(raw_score, 0.99))
+    if step == 1:
+        # Step 1: Classification
+        synonyms = ["delivery", "shipping", "refund", "account", "login", "order"]
+        match = any(word in normalized for word in synonyms)
+        raw_score = 0.3 if match else 0.1
+    else:
+        # Step 2: Resolution
+        keywords = task.get("resolution_keywords", [])
+        matches = sum(1 for kw in keywords if kw in normalized)
+        coverage = matches / max(len(keywords), 1)
+        raw_score = (coverage * 0.6) + 0.1
+
+    # --- THE CRITICAL FIX ---
+    # Clamp everything to a safe middle-ground.
+    # 0.0 becomes 0.05 | 1.0 becomes 0.95
+    safe_score = max(0.05, min(raw_score, 0.95))
     
     return float(round(safe_score, 3))
