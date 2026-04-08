@@ -70,37 +70,25 @@ def grade_resolution(response: str, task: Dict[str, str]) -> float:
     raw_res = resolution_score(response, task)
     raw_emp = empathy_score(response, task.get("sentiment", "neutral"))
     return round(raw_res + raw_emp, 3)
-
-import re
-from typing import Dict
-
-# ... (Keep your CATEGORY_SYNONYMS and helper functions as they are) ...
-
-import re
-from typing import Dict
-
-def grade(response: str, task: Dict[str, str], step: int) -> float:
-    """
-    Main grading logic. 
-    Returns a score strictly within (0.05, 0.95) to satisfy validator.
-    """
-    normalized = response.lower()
     
+def grade(self, response: str, task: dict, step: int) -> float:
+    """
+    STRICT SAFETY GRADER:
+    Ensures every return is within [0.1, 0.9].
+    """
+    res = response.lower()
+    
+    # 1. Simple Scoring
     if step == 1:
-        # Step 1: Classification
-        synonyms = ["delivery", "shipping", "refund", "account", "login", "order"]
-        match = any(word in normalized for word in synonyms)
-        raw_score = 0.3 if match else 0.1
+        # Give 0.5 for a match, 0.1 for a miss. NEVER 0.0.
+        keywords = ["delivery", "refund", "account", "order", "shipping"]
+        score = 0.5 if any(k in res for k in keywords) else 0.1
     else:
-        # Step 2: Resolution
-        keywords = task.get("resolution_keywords", [])
-        matches = sum(1 for kw in keywords if kw in normalized)
-        coverage = matches / max(len(keywords), 1)
-        raw_score = (coverage * 0.6) + 0.1
+        # Give 0.8 for a match, 0.2 for a miss. NEVER 1.0.
+        res_keywords = task.get("resolution_keywords", [])
+        score = 0.8 if any(k in res for k in res_keywords) else 0.2
 
-    # --- THE CRITICAL FIX ---
-    # Clamp everything to a safe middle-ground.
-    # 0.0 becomes 0.05 | 1.0 becomes 0.95
-    safe_score = max(0.05, min(raw_score, 0.95))
-    
-    return float(round(safe_score, 3))
+    # 2. THE FINAL LOCK
+    # If any math went wrong, this forces the float into the safe zone.
+    return float(max(0.1, min(score, 0.9)))
+
