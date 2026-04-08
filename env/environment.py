@@ -1,101 +1,80 @@
+import os
 import yaml
-from typing import Dict, Any, Tuple
-# Import the central models from the server package
-from server.models import Observation, StepResponse, Action
+import re
+from typing import Dict, List, Tuple, Any
+from pydantic import BaseModel
 
-# Alias StepResponse to StepResult so the existing method signatures work
-StepResult = StepResponse
+# --- 1. MODEL DEFINITION ---
+class Action(BaseModel):
+    response: str
 
-# Import logic from sibling files in the same folder
-from .tasks import TASKS
-from .grader import grade
+# --- 2. THE GRADER (Scoring Logic) ---
+class SupportGrader:
+    CATEGORY_SYNONYMS = {
+        "delivery": ["delivery", "shipping", "shipment", "track", "tracked", "arrive"],
+        "refund": ["refund", "return", "reimburse", "money back", "exchange"],
+        "account": ["account", "login", "access", "locked", "sign in", "billing", "subscription"],
+    }
+    
+    EMPATHY_PHRASES = ["sorry", "apologize", "understand", "thank you", "happy to help", "please"]
+    NEGATIVE_PHRASES = ["can't", "cannot", "won't", "not possible", "no", "unable"]
 
+    @staticmethod
+    def normalize_text(text: str) -> str:
+        return re.sub(r"[^a-z0-9 ]+", " ", text.lower())
+
+    def grade(self, response: str, task: Dict, step: int) -> float:
+        normalized = self.normalize_text(response)
+        expected_cat = task.get("expected_category", "account")
+        
+        # Step 1: Classification Score
+        if step == 1:
+            synonyms = self.CATEGORY_SYNONYMS.get(expected_cat, [])
+            match = any(word in normalized for word in synonyms)
+            raw_score = 0.3 if match else 0.05
+        
+        # Step 2+: Resolution Score
+        else:
+            keywords = task.get("resolution_keywords", [])
+            matches = sum(1 for kw in keywords if kw in normalized)
+            coverage = matches / max(len(keywords), 1)
+            
+            # Base logic + Empathy bonus
+            empathy_bonus = 0.15 if any(w in normalized for w in self.EMPATHY_PHRASES) else 0.0
+            penalty = 0.1 if any(w in normalized for w in self.NEGATIVE_PHRASES) else 0.0
+            raw_score = (coverage * 0.5) + empathy_bonus - penalty
+
+        # --- THE CRITICAL VALIDATOR FIX ---
+        # "Strictly between 0 and 1" means no 0.0 and no 1.0.
+        # This clamping ensures the Task Validation check passes.
+        safe_score = max(0.01, min(raw_score, 0.99))
+        return float(round(safe_score, 3))
+
+# --- 3. THE ENVIRONMENT ---
 class CustomerSupportEnv:
-    MAX_STEPS = 2
-
     def __init__(self):
-        self.index = 0
-        self.current_task = None
-        self.step_number = 1
-        self.total_reward = 0.0
-        self.done = False
+        self.grader = SupportGrader()
+        self.tasks = [
+            {"ticket": "Where is my order?", "expected_category": "delivery", "resolution_keywords": ["tracking", "transit"]},
+            {"ticket": "I want a refund for my broken item.", "expected_category": "refund", "resolution_keywords": ["return", "refund", "receipt"]},
+            {"ticket": "I cannot log into my account.", "expected_category": "account", "resolution_keywords": ["password", "reset", "email"]}
+        ]
+        self.current_task_idx = 0
+        self.step_count = 0
+        self.MAX_STEPS = 2
 
-    def reset(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        """
-        Resets the environment for a new task.
-        Standard OpenEnv reset returns (observation_dict, info_dict).
-        """
-        self.current_task = TASKS[self.index % len(TASKS)]
-        self.index += 1
-        self.step_number = 1
-        self.total_reward = 0.0
-        self.done = False
+    def reset(self) -> Tuple[Dict, Dict]:
+        self.step_count = 0
+        task = self.tasks[self.current_task_idx]
+        self.current_task_idx = (self.current_task_idx + 1) % len(self.tasks)
+        return {"ticket": task["ticket"]}, {"task": task["expected_category"]}
 
-        obs = self._build_observation()
-        info = {
-            "task": self.current_task.get("name", "Support Task"),
-            "difficulty": self.current_task.get("difficulty", "medium"),
-            "phase": "classification",
-        }
-        return obs.dict(), info
-
-    def step(self, action_input: Any) -> Tuple[Dict[str, Any], float, bool, Dict[str, Any]]:
-        """
-        Processes an agent action and returns (observation, reward, done, info).
-        """
-        if self.current_task is None:
-            raise ValueError("Environment must be reset before calling step().")
+    def step(self, action: Action) -> Tuple[Dict, float, bool, bool, Dict]:
+        self.step_count += 1
+        task = self.tasks[(self.current_task_idx - 1) % len(self.tasks)]
         
-        if self.done:
-            return self._build_observation().dict(), 0.0, True, {"error": "Environment already done"}
-
-        # Extract the response string
-        if hasattr(action_input, 'response'):
-            response_text = action_input.response
-        elif isinstance(action_input, dict):
-            response_text = action_input.get("response", "")
-        else:
-            response_text = str(action_input)
-
-        # 1. Grade the response for the CURRENT step
-        reward = grade(response_text, self.current_task, self.step_number)
-        self.total_reward += reward
+        # Calculate Reward using the Clamped Grader
+        reward = self.grader.grade(action.response, task, self.step_count)
         
-        # 2. Update the state: If we just finished Step 2, we are DONE.
-        if self.step_number >= self.MAX_STEPS:
-            self.done = True
-        else:
-            self.step_number += 1
-            self.done = False
-
-        obs = self._build_observation()
-        info = {
-            "task": self.current_task.get("name", "Support Task"),
-            "difficulty": self.current_task.get("difficulty", "medium"),
-            "phase": "resolution" if self.done else "classification",
-        }
-
-        return obs.dict(), reward, self.done, info
-
-    def state(self) -> Dict[str, Any]:
-        """Returns current environment metadata."""
-        return {
-            "task": self.current_task["name"] if self.current_task else None,
-            "step": self.step_number,
-            "total_reward": round(self.total_reward, 3),
-            "is_done": self.done
-        }
-
-    def close(self) -> None:
-        pass
-
-    def _build_observation(self) -> Observation:
-        """Helper to construct the Observation Pydantic model."""
-        return Observation(
-            ticket=self.current_task["ticket"],
-            priority=self.current_task["priority"],
-            sentiment=self.current_task["sentiment"],
-            sla_hours=float(self.current_task["sla_hours"]),
-            step=self.step_number,
-            instructions=self.current_task["instructions"],
-        )
+        done = self.step_count >= self.MAX_STEPS
+        return {"ticket": "Next step..."}, reward, done, False, {}
